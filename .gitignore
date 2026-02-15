@@ -1,0 +1,8 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+# Python cache files
+__pycache__/
