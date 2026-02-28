@@ -91,6 +91,11 @@ services:
     depends_on:
       cassandra:
         condition: service_healthy
+    environment:
+      - HOME=/opt/spark/home
+    volumes:
+      - ./spark_home:/opt/spark/home
+      - ./src:/opt/spark/src
     networks:
       - network1
     # these are the default for bitnami image
@@ -105,8 +110,6 @@ services:
       - '7077:7077'
     # start the deamon directly 
     command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master --host spark-master --port 7077 --webui-port 8080
-    # volumes:
-    # - /var/run/docker.sock:/var/run/docker.sock
 
   spark-worker:
     image: spark:latest
