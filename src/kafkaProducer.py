@@ -27,7 +27,8 @@ data = helpers.get_sat_data(SAT_ID, API_KEY, OB_LAT, OB_LON, OB_ALT)
 producer = KafkaProducer(
     # Use of intern address 'kafka:29092'
     bootstrap_servers=KAFKA_BROKER,
-    value_serializer=lambda v: json.dumps(v).encode('utf-8')
+    value_serializer=lambda v: json.dumps(v).encode('utf-8'),
+    acks=1 # leader ensures data is received
 )
 
 print(f"Producer démarré. Envoi vers {KAFKA_BROKER}...")
