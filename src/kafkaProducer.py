@@ -2,15 +2,11 @@ from kafka import KafkaProducer
 import json
 import time
 import requests
-
 import helpers
 
-producer = KafkaProducer(
-    bootstrap_servers='localhost:9092',
-    value_serializer=lambda v: json.dumps(v).encode('utf-8')
-)
-
-topic = 'satellite-positions'
+# Docker Configuration
+KAFKA_BROKER = 'kafka:29092'
+TOPIC = 'satellite-positions'
 
 # # Example data (replace with API call)
 # data = {
@@ -20,7 +16,7 @@ topic = 'satellite-positions'
 #     ]
 # }
 
-# API call 
+# API call
 # API configuration
 API_KEY = "9MGGM6-VSQ68S-U4M6E8-5NMO"
 SAT_ID = "25544"  # ISS (International Space Station)
@@ -28,10 +24,26 @@ OB_LAT, OB_LON, OB_ALT = 40.7128, -74.0060, 0  # Observer's location (New York C
 
 data = helpers.get_sat_data(SAT_ID, API_KEY, OB_LAT, OB_LON, OB_ALT)
 
-# print all the data
-print(data)
+producer = KafkaProducer(
+    # Use of intern address 'kafka:29092'
+    bootstrap_servers=KAFKA_BROKER,
+    value_serializer=lambda v: json.dumps(v).encode('utf-8')
+)
+
+print(f"Producer démarré. Envoi vers {KAFKA_BROKER}...")
 
 while True:
-    producer.send(topic, value=data)
-    print("Sent:", data)
-    time.sleep(500)  # Send every 300 seconds
+    try:
+        # Get news data every 300z
+        data = helpers.get_sat_data(SAT_ID, API_KEY, OB_LAT, OB_LON, OB_ALT)
+        
+        if data:
+            producer.send(TOPIC, value=data)
+            print("Sent:", data)
+        else:
+            print("Erreur : Données vides reçues de l'API.")
+   
+    except Exception as e:
+        print(f"Erreur lors de l'envoi : {e}")
+
+    time.sleep(300)  
