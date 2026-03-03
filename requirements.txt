@@ -1,5 +1,7 @@
-kafka-python
-requests
-pyspark
+kafka-python-ng
+requests         # Pour appeler l'API N2YO
+pyspark==3.5.0   
+cassandra-driver # Pour initier tes tables
 jupyter
 notebook
+pandas

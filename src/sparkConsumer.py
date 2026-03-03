@@ -26,6 +26,9 @@ from pyspark.sql.types import StructType, StructField, StringType, IntegerType, 
         ]
     }
 """
+
+# Construction plan
+# Position of the satellite
 position_schema = StructType([
     StructField("satlatitude", DoubleType()),
     StructField("satlongitude", DoubleType()),
@@ -38,6 +41,7 @@ position_schema = StructType([
     StructField("eclipsed", BooleanType())
 ])
 
+# Name of the satellite
 info_schema = StructType([
     StructField("satname", StringType()),
     StructField("satid", IntegerType()),
@@ -49,9 +53,10 @@ schema = StructType([
     StructField("positions", ArrayType(position_schema))
 ])
 
+# SparksSession creation
 spark = SparkSession.builder \
     .appName("SatelliteStream") \
-    .config("spark.cassandra.connection.host", "127.0.0.1") \
+    .config("spark.cassandra.connection.host", "cassandra") \
     .config("spark.driver.extraJavaOptions", "-Djava.security.manager=allow") \
     .config("spark.executor.extraJavaOptions", "-Djava.security.manager=allow") \
     .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0,com.datastax.spark:spark-cassandra-connector_2.12:3.5.0") \
@@ -60,7 +65,7 @@ spark = SparkSession.builder \
 # Read from Kafka
 df = spark.readStream \
     .format("kafka") \
-    .option("kafka.bootstrap.servers", "localhost:9092") \
+    .option("kafka.bootstrap.servers", "kafka:29092") \
     .option("subscribe", "satellite-positions") \
     .load()
 

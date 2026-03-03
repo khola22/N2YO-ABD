@@ -22,8 +22,6 @@ API_KEY = "9MGGM6-VSQ68S-U4M6E8-5NMO"
 SAT_ID = "25544"  # ISS (International Space Station)
 OB_LAT, OB_LON, OB_ALT = 40.7128, -74.0060, 0  # Observer's location (New York City)
 
-data = helpers.get_sat_data(SAT_ID, API_KEY, OB_LAT, OB_LON, OB_ALT)
-
 producer = KafkaProducer(
     # Use of intern address 'kafka:29092'
     bootstrap_servers=KAFKA_BROKER,
@@ -35,7 +33,7 @@ print(f"Producer démarré. Envoi vers {KAFKA_BROKER}...")
 
 while True:
     try:
-        # Get news data every 300z
+        # Get news data every 300s
         data = helpers.get_sat_data(SAT_ID, API_KEY, OB_LAT, OB_LON, OB_ALT)
         
         if data:
