@@ -175,7 +175,7 @@ services:
       --conf spark.cassandra.connection.host=cassandra
       --conf spark.driver.extraJavaOptions=-Djava.security.manager=allow
       --conf spark.executor.extraJavaOptions=-Djava.security.manager=allow
-      --packages org.apache.spark:spark-sql-kafka-0-10_2.13:4.0.0,com.datastax.spark:spark-cassandra-connector_2.13:3.5.1
+      --packages org.apache.spark:spark-sql-kafka-0-10_2.13:4.0.0,com.datastax.spark:spark-cassandra-connector_2.13:3.5.1,com.github.jnr:jnr-posix:3.1.15
       /opt/spark/src/sparkConsumer.py
   
 # Enable communication between containers
