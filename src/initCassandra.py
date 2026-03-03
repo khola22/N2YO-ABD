@@ -20,7 +20,8 @@ def setup():
         CREATE KEYSPACE IF NOT EXISTS satellite
         WITH REPLICATION = {'class': 'SimpleStrategy', 'replication_factor': 1}
     """)
-    
+
+    # TABLE 1 — Positions brutes (Speed + Batch Layer)
     session.execute("""
         CREATE TABLE IF NOT EXISTS satellite.positions (
             satid int,
@@ -30,9 +31,37 @@ def setup():
             sataltitude double,
             timestamp int,
             eclipsed boolean,
+            speed_km_s   double,  
             PRIMARY KEY (satid, timestamp)
         )
     """)
+
+    # # TABLE 2 — Statistiques d'éclipse (Speed Layer)
+    # session.execute("""
+    #     CREATE TABLE IF NOT EXISTS satellite.eclipse_stats (
+    #         satid            int,
+    #         satname          text,
+    #         time_in_eclipse  bigint,
+    #         time_in_sunlight bigint,
+    #         total_positions  bigint,
+    #         PRIMARY KEY (satid)
+    #     )
+    # """)
+
+    # # TABLE 3 — Vitesse orbitale (Speed + Batch Layer)
+    # session.execute("""
+    #     CREATE TABLE IF NOT EXISTS satellite.orbital_speed (
+    #         satid        int,
+    #         timestamp    int,
+    #         satname      text,
+    #         speed_km_s   double,
+    #         satlatitude  double,
+    #         satlongitude double,
+    #         sataltitude  double,
+    #         PRIMARY KEY (satid, timestamp)
+    #     )
+    # """)
+    
     print("Keyspace and Table created successfully!")
     cluster.shutdown()
 
