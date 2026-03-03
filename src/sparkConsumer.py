@@ -91,6 +91,7 @@ query1 = positions_df.writeStream \
     .option("keyspace", "satellite") \
     .option("table", "positions") \
     .option("checkpointLocation", "/opt/spark/home/checkpoint_cassandra") \
+    .trigger(processingTime='200 seconds') \
     .outputMode("append") \
     .start()
 
