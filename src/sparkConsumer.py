@@ -90,6 +90,7 @@ query1 = positions_df.writeStream \
     .format("org.apache.spark.sql.cassandra") \
     .option("keyspace", "satellite") \
     .option("table", "positions") \
+    .option("checkpointLocation", "/opt/spark/home/checkpoint_cassandra") \
     .outputMode("append") \
     .start()
 
