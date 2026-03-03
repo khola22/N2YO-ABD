@@ -59,8 +59,9 @@ spark = SparkSession.builder \
     .config("spark.cassandra.connection.host", "cassandra") \
     .config("spark.driver.extraJavaOptions", "-Djava.security.manager=allow") \
     .config("spark.executor.extraJavaOptions", "-Djava.security.manager=allow") \
-    .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0,com.datastax.spark:spark-cassandra-connector_2.12:3.5.0") \
     .getOrCreate()
+    # .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0,com.datastax.spark:spark-cassandra-connector_2.12:3.5.0") \
+    
 
 # Read from Kafka
 df = spark.readStream \
@@ -85,7 +86,7 @@ positions_df = json_df.select(
 )
 
 # Write to Cassandra (Speed Layer)
-positions_df.writeStream \
+query1 = positions_df.writeStream \
     .format("org.apache.spark.sql.cassandra") \
     .option("keyspace", "satellite") \
     .option("table", "positions") \
@@ -93,11 +94,23 @@ positions_df.writeStream \
     .start()
 
 # Write to Parquet (Batch Layer)
-positions_df.writeStream \
+# The /home/parquet_data path in the consumer maps to the ./ volume already mounted on Cassandra. We should instead use /opt/spark/home/parquet_data to keep it within the spark_home volume that's consistently mounted across your Spark services:
+# Why not inside the producer container? 
+# The Dockerfile/producer service uses a lightweight python:3.11-slim image with no JVM — PySpark requires Java, so it must live on the Spark image. 
+# Keeping them separate also respects the Lambda architecture the pipeline is building toward (producer = ingestion layer, Spark = batch + speed layers).
+query2 = positions_df.writeStream \
     .format("parquet") \
-    .option("path", "/home/parquet_data") \
-    .option("checkpointLocation", "/home/parquet_checkpoint") \
+    .option("path", "/opt/spark/home/parquet_data") \
+    .option("checkpointLocation","/opt/spark/home/parquet_checkpoint") \
     .outputMode("append") \
     .start()
+
+# This will now print WHY a stream stopped
+for q in [query1, query2]:
+    try:
+        q.awaitTermination()
+    except Exception as e:
+        print(f"Stream failed: {e}")
+        raise
 
 spark.streams.awaitAnyTermination()

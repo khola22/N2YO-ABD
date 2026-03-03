@@ -152,6 +152,32 @@ services:
     command: >
       sh -c "pip install kafka-python requests && python kafkaProducer.py"
 
+# Spark Consumer (submits the streaming job to spark-master)
+  spark-consumer:
+    image: spark:latest
+    container_name: spark-consumer
+    networks:
+      - network1
+    depends_on:
+      cassandra:
+        condition: service_healthy
+      spark-master:
+        condition: service_started
+      kafka:
+        condition: service_started
+    volumes:
+      - ./spark_home:/opt/spark/home
+      - ./src:/opt/spark/src
+    command: >
+      /opt/spark/bin/spark-submit
+      --master spark://spark-master:7077
+      --conf spark.jars.ivy=/opt/spark/home/.ivy2
+      --conf spark.cassandra.connection.host=cassandra
+      --conf spark.driver.extraJavaOptions=-Djava.security.manager=allow
+      --conf spark.executor.extraJavaOptions=-Djava.security.manager=allow
+      --packages org.apache.spark:spark-sql-kafka-0-10_2.13:4.0.0,com.datastax.spark:spark-cassandra-connector_2.13:3.5.1
+      /opt/spark/src/sparkConsumer.py
+  
 # Enable communication between containers
 networks:
   network1:
