@@ -33,8 +33,8 @@ print(f"Producer démarré. Envoi vers {KAFKA_BROKER}...")
 
 while True:
     try:
-        # Get news data every 300s
-        data = helpers.get_sat_data(SAT_ID, API_KEY, OB_LAT, OB_LON, OB_ALT)
+        # Get news data every 100s
+        data = helpers.get_sat_data(SAT_ID, API_KEY, OB_LAT, OB_LON, OB_ALT, seconds=10)
         
         if data:
             producer.send(TOPIC, value=data)
@@ -45,4 +45,4 @@ while True:
     except Exception as e:
         print(f"Erreur lors de l'envoi : {e}")
 
-    time.sleep(300)  
+    time.sleep(100)  

@@ -166,25 +166,16 @@ queryCassandra = positions_df.writeStream \
     # .trigger(processingTime='20 seconds') \
     # .option("keyspace", "satellite") \
     # .option("table", "positions") \
-    # 
-    
 
-# Write to Parquet (Batch Layer)
-queryParquet = positions_df.writeStream \
+
+queryFinal = positions_df.writeStream \
     .foreachBatch(compute_speed_and_write) \
-    .option("path", "/opt/spark/home/parquet_data") \
-    .option("checkpointLocation","/opt/spark/home/parquet_checkpoint") \
+    .trigger(processingTime='10 seconds') \
+    .option("checkpointLocation", "/opt/spark/home/checkpoint_final") \
     .outputMode("append") \
     .start()
-    # .trigger(processingTime='20 seconds') \
 
-
-# logs if it crashes
-# for q in [queryCassandra, queryParquet, query_speed_cassandra, query_speed_parquet]:
-#     try:
-#         q.awaitTermination()
-#     except Exception as e:
-#         print(f"Stream failed: {e}")
-#         raise
-
-spark.streams.awaitAnyTermination()
+try:
+    queryFinal.awaitTermination()
+except Exception as e:
+    print(f"Erreur pendant le streaming : {e}")

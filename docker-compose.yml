@@ -89,6 +89,7 @@ services:
 # Spark streaming
   spark-master:
     image: spark:latest
+    container_name: spark-master
     depends_on:
       cassandra:
         condition: service_healthy
@@ -113,6 +114,7 @@ services:
 
   spark-worker:
     image: spark:latest
+    container_name: spark-worker
     depends_on:
       - spark-master
     networks:
@@ -155,7 +157,7 @@ services:
 # Spark Consumer (submits the streaming job to spark-master)
   spark-consumer:
     image: spark:latest
-    container_name: spark-consumer
+    container_name: sparkConsumer
     networks:
       - network1
     depends_on:
