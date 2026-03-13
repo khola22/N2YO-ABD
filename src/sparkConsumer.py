@@ -81,49 +81,57 @@ spark = SparkSession.builder \
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-# 3. CALCULATION FONCTION (orbital speed)
+# 3. CALCULATION FONCTION (orbital speed)              
 def compute_speed_and_write(batch_df, batch_id):
-    # grouping satellite positions and sorting them chronologically
-    window_spec = Window.partitionBy("satid").orderBy("timestamp")
-    
-    result = batch_df \
-        # Retrievement of the previous point (latitude, longitude, and timestamp)
-        .withColumn("prev_lat",       lag("satlatitude",  1).over(window_spec)) \
-        .withColumn("prev_lon",       lag("satlongitude", 1).over(window_spec)) \
-        .withColumn("prev_timestamp", lag("timestamp",    1).over(window_spec)) \
-        # Preparing the sphere variables
-        .withColumn("R", col("sataltitude") + 6371.0) \
-        .withColumn("dlat", radians(col("satlatitude")  - col("prev_lat"))) \
-        .withColumn("dlon", radians(col("satlongitude") - col("prev_lon"))) \
-        # Haversine formula
-        .withColumn("a",
-            spark_pow(sin(col("dlat") / 2), 2) +
-            cos(radians(col("prev_lat"))) *
-            cos(radians(col("satlatitude"))) *
-            spark_pow(sin(col("dlon") / 2), 2)
-        ) \
-        .withColumn("distance_km", 2 * col("R") * asin(sqrt(col("a")))) \
-        # Speed calculation
-        .withColumn("delta_t", col("timestamp") - col("prev_timestamp")) \
-        .withColumn("speed_km_s",
-            when(col("delta_t") > 0, col("distance_km") / col("delta_t"))
-            .otherwise(None)
-        ) \
-        .drop("prev_lat", "prev_lon", "prev_timestamp", "R",
-              "dlat", "dlon", "a", "distance_km", "delta_t")
-    
-    # Écrire dans Cassandra
-    result.write \
-        .format("org.apache.spark.sql.cassandra") \
-        .mode("append") \
-        .options(table="positions", keyspace="satellite") \
-        .save()
-    
-    # Écrire en Parquet
-    result.write \
-        .format("parquet") \
-        .mode("append") \
-        .save("/opt/spark/home/parquet_data")
+    if batch_df.count() > 0:
+        # 1. CALCUL DE LA VITESSE (logique Haversine)
+        window_spec = Window.partitionBy("satid").orderBy("timestamp")
+        
+        enriched_df = batch_df \
+            .withColumn("prev_lat",       lag("satlatitude",  1).over(window_spec)) \
+            .withColumn("prev_lon",       lag("satlongitude", 1).over(window_spec)) \
+            .withColumn("prev_timestamp", lag("timestamp",    1).over(window_spec)) \
+            .withColumn("R", col("sataltitude") + 6371.0) \
+            .withColumn("dlat", radians(col("satlatitude")  - col("prev_lat"))) \
+            .withColumn("dlon", radians(col("satlongitude") - col("prev_lon"))) \
+            .withColumn("a",
+                spark_pow(sin(col("dlat") / 2), 2) +
+                cos(radians(col("prev_lat"))) *
+                cos(radians(col("satlatitude"))) *
+                spark_pow(sin(col("dlon") / 2), 2)
+            ) \
+            .withColumn("distance_km", 2 * col("R") * asin(sqrt(col("a")))) \
+            .withColumn("delta_t", col("timestamp") - col("prev_timestamp")) \
+            .withColumn("speed_km_s",
+                when(col("delta_t") > 0, col("distance_km") / col("delta_t"))
+                .otherwise(None)
+            ) \
+            .drop("prev_lat", "prev_lon", "prev_timestamp", "R",
+                  "dlat", "dlon", "a", "distance_km", "delta_t")
+
+        # 2. OPTIMISATION : On ne garde que les points avec une vitesse
+        # final_df = enriched_df.filter(col("speed_km_s").isNotNull())
+        final_df = enriched_df
+
+        # 3. ECRITURE CASSANDRA (Speed Layer)
+        final_df.write \
+            .format("org.apache.spark.sql.cassandra") \
+            .mode("append") \
+            .options(table="positions", keyspace="satellite") \
+            .save()
+
+        # 4. ECRITURE PARQUET (Batch Layer / Historisation)
+        # On partitionne par satid pour que le dossier soit bien organisé
+        final_df.write \
+            .mode("append") \
+            .parquet("/opt/spark/home/parquet_data")
+
+    #     final_df.write \
+    #         .mode("append") \
+    #         .format("parquet") \
+    # .       .save("/opt/spark/home/parquet_data")
+
+        print(f"✅ Batch {batch_id} traité : Cassandra mis à jour et Parquet archivé.")
 
 # 4. LECTURE AND PARSING
 # Read from Kafka
@@ -158,16 +166,37 @@ positions_df = json_df.select(
 #             Parquet permet les analyses historiques en batch (trajectoires, stats).
 # ─────────────────────────────────────────────────────────────────────────────
 
-# 5. QUERIES STARTING   
-queryCassandra = positions_df.writeStream \
-    .format("org.apache.spark.sql.cassandra") \
-    .options(table="positions", keyspace="satellite") \
-    .option("checkpointLocation", "/opt/spark/home/checkpoint_cassandra") \
-    .outputMode("append") \
+# 5. QUERY STARTING   
+queryFinal = positions_df.writeStream \
+    .foreachBatch(compute_speed_and_write) \
+    .trigger(processingTime='10 seconds') \
+    .option("checkpointLocation", "/opt/spark/home/checkpoint_final") \
     .start()
-    # .trigger(processingTime='20 seconds') \
-    # .option("keyspace", "satellite") \
-    # .option("table", "positions") \
+
+try:
+    queryFinal.awaitTermination()
+except Exception as e:
+    print(f"Erreur pendant le streaming : {e}")
+    
+
+# # Données brutes du satellite envoyées sur Cassandra
+# queryCassandra = positions_df.writeStream \
+#     .format("org.apache.spark.sql.cassandra") \
+#     .options(table="positions", keyspace="satellite") \
+#     .option("checkpointLocation", "/opt/spark/home/checkpoint_cassandra") \
+#     .outputMode("append") \
+#     .start()
+#     # .trigger(processingTime='20 seconds') \
+#     # .option("keyspace", "satellite") \
+#     # .option("table", "positions") \
+        
+# # 2. On lance l'écriture vers Parquet (Historisation / Archive)
+# query_parquet = result.writeStream \
+#     .outputMode("append") \
+#     .format("parquet") \
+#     .option("path", "/opt/spark/home/parquet_data") \
+#     .option("checkpointLocation", "/opt/spark/checkpoints/parquet") \
+#     .start()
 
 
 # NB : Le problème est fondamental — Window.partitionBy().orderBy() avec lag() ne peut jamais être 
@@ -177,14 +206,11 @@ queryCassandra = positions_df.writeStream \
 # il convertit temporairement chaque mini-batch en DataFrame statique où lag() est autorisé
 # C'est pour cela que foreachBatch est la seule solution:
 
-queryFinal = positions_df.writeStream \
-    .foreachBatch(compute_speed_and_write) \
-    .trigger(processingTime='10 seconds') \
-    .option("checkpointLocation", "/opt/spark/home/checkpoint_final") \
-    .outputMode("append") \
-    .start()
+# # Données brutes et enrichies par le calcul de la vitesse envoyées
+# queryFinal = positions_df.writeStream \
+#     .foreachBatch(compute_speed_and_write) \
+#     .trigger(processingTime='10 seconds') \
+#     .option("checkpointLocation", "/opt/spark/home/checkpoint_final") \
+#     .outputMode("append") \
+#     .start()
 
-try:
-    queryFinal.awaitTermination()
-except Exception as e:
-    print(f"Erreur pendant le streaming : {e}")

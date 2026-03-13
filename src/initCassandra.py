@@ -1,3 +1,4 @@
+# Imports
 import time
 from cassandra.cluster import Cluster
 from cassandra.auth import PlainTextAuthProvider
@@ -35,8 +36,23 @@ def setup():
             PRIMARY KEY (satid, timestamp)
         )
     """)
+    
+    # TABLE 2 — Statiqtiques réalisées quotidiennement (Alimentées par le traitement Batch)
+    # On stocke les vues Batch 
+    session.execute("""
+        CREATE TABLE IF NOT EXISTS satellite.daily_stats (
+            satid int,
+            satname text,
+            day date,
+            avg_speed double,
+            max_altitude double,
+            min_altitude double,
+            total_records int, 
+            PRIMARY KEY (satid, day)
+        )
+    """) 
 
-    # # TABLE 2 — Statistiques d'éclipse (Speed Layer)
+    # # TABLE 3 — Statistiques d'éclipse (Speed Layer)
     # session.execute("""
     #     CREATE TABLE IF NOT EXISTS satellite.eclipse_stats (
     #         satid            int,
@@ -45,20 +61,6 @@ def setup():
     #         time_in_sunlight bigint,
     #         total_positions  bigint,
     #         PRIMARY KEY (satid)
-    #     )
-    # """)
-
-    # # TABLE 3 — Vitesse orbitale (Speed + Batch Layer)
-    # session.execute("""
-    #     CREATE TABLE IF NOT EXISTS satellite.orbital_speed (
-    #         satid        int,
-    #         timestamp    int,
-    #         satname      text,
-    #         speed_km_s   double,
-    #         satlatitude  double,
-    #         satlongitude double,
-    #         sataltitude  double,
-    #         PRIMARY KEY (satid, timestamp)
     #     )
     # """)
     
