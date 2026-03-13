@@ -169,13 +169,13 @@ queryCassandra = positions_df.writeStream \
     # .option("keyspace", "satellite") \
     # .option("table", "positions") \
 
-# ─────────────────────────────────────────────────────────────────────────────
+
 # NB : Le problème est fondamental — Window.partitionBy().orderBy() avec lag() ne peut jamais être 
 # appliqué directement sur un stream, peu importe la table ou la structure.
 # Spark streaming ne peut pas regarder en arrière dans l'historique des données — il ne voit qu'un batch à la fois.
 # C'est pour ça que foreachBatch est la seule solution — 
-# il convertit temporairement chaque mini-batch en DataFrame statique où lag() est autorisé :
-# ─────────────────────────────────────────────────────────────────────────────
+# il convertit temporairement chaque mini-batch en DataFrame statique où lag() est autorisé
+# C'ets pour cela que foreachBatch est la seule solution:
 
 queryFinal = positions_df.writeStream \
     .foreachBatch(compute_speed_and_write) \
