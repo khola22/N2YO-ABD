@@ -175,7 +175,7 @@ queryCassandra = positions_df.writeStream \
 # Spark streaming ne peut pas regarder en arrière dans l'historique des données — il ne voit qu'un batch à la fois.
 # C'est pour ça que foreachBatch est la seule solution — 
 # il convertit temporairement chaque mini-batch en DataFrame statique où lag() est autorisé
-# C'ets pour cela que foreachBatch est la seule solution:
+# C'est pour cela que foreachBatch est la seule solution:
 
 queryFinal = positions_df.writeStream \
     .foreachBatch(compute_speed_and_write) \
