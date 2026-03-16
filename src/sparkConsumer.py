@@ -68,18 +68,25 @@ spark = SparkSession.builder \
     # .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0,com.datastax.spark:spark-cassandra-connector_2.12:3.5.0") \
 
 # ─────────────────────────────────────────────────────────────────────────────
-# TRAITEMENT 2 — VITESSE ORBITALE (formule de Haversine)
-# Stockage  : Cassandra (Speed Layer) → table orbital_speed
-# Objectif  : Estimer la vitesse instantanée de l'ISS en km/s entre deux
-#             positions consécutives. Permet de détecter des anomalies orbitales
-#             (manœuvres, freinage atmosphérique). Stocké en Cassandra pour
-#             alertes temps réel. Parquet pour analyse de tendance long terme.
+# TRAITEMENT — POSITIONS BRUTES + VITESSE ORBITALE (formule de Haversine)
 #
-# Formule Haversine :
+# Stockage Cassandra (Speed Layer) :
+#   → Uniquement les positions avec vitesse calculée (speed_km_s non null)
+#   → Lectures en <10ms pour le dashboard temps réel et alertes orbitales
+#
+# Stockage Parquet (Batch Layer) :
+#   → Toutes les positions, y compris le premier point (sans vitesse)
+#   → Analyses historiques en batch (trajectoires, stats, tendances long terme)
+#
+# Calcul de vitesse — Formule de Haversine :
 #   a = sin²(Δlat/2) + cos(lat1) * cos(lat2) * sin²(Δlon/2)
 #   d = 2R * asin(√a)        R = rayon Terre + altitude (~6800 km)
+#   vitesse = d / Δt         en km/s
+#
+# Objectif : Estimer la vitesse instantanée de l'ISS entre deux positions
+#            consécutives. Permet de détecter des anomalies orbitales
+#            (manœuvres, freinage atmosphérique).
 # ─────────────────────────────────────────────────────────────────────────────
-
 
 # 3. CALCULATION FONCTION (orbital speed)              
 def compute_speed_and_write(batch_df, batch_id):
@@ -109,29 +116,19 @@ def compute_speed_and_write(batch_df, batch_id):
             .drop("prev_lat", "prev_lon", "prev_timestamp", "R",
                   "dlat", "dlon", "a", "distance_km", "delta_t")
 
-        # 2. OPTIMISATION : On ne garde que les points avec une vitesse
-        # final_df = enriched_df.filter(col("speed_km_s").isNotNull())
-        final_df = enriched_df
-
-        # 3. ECRITURE CASSANDRA (Speed Layer)
-        final_df.write \
-            .format("org.apache.spark.sql.cassandra") \
+        # Cassandra : uniquement les points avec vitesse (on ne garde pas les valeurs nulles)
+        enriched_df.filter(col("speed_km_s").isNotNull()) \
+            .write.format("org.apache.spark.sql.cassandra") \
             .mode("append") \
             .options(table="positions", keyspace="satellite") \
             .save()
 
-        # 4. ECRITURE PARQUET (Batch Layer / Historisation)
-        # On partitionne par satid pour que le dossier soit bien organisé
-        final_df.write \
+        # Parquet : tout l'historique, y compris le premier point
+        enriched_df.write \
             .mode("append") \
-            .parquet("/opt/spark/home/parquet_data")
-
-    #     final_df.write \
-    #         .mode("append") \
-    #         .format("parquet") \
-    # .       .save("/opt/spark/home/parquet_data")
-
-        print(f"✅ Batch {batch_id} traité : Cassandra mis à jour et Parquet archivé.")
+            .parquet("/opt/spark/home/parquet_data") \
+        
+        print(f"Batch {batch_id} traité : Cassandra mis à jour et Parquet archivé.")
 
 # 4. LECTURE AND PARSING
 # Read from Kafka
@@ -158,14 +155,6 @@ positions_df = json_df.select(
     col("position.eclipsed").alias("eclipsed")
 )
 
-# ─────────────────────────────────────────────────────────────────────────────
-# TRAITEMENT 1 — POSITIONS BRUTES
-# Stockage  : Cassandra (Speed Layer) + Parquet (Batch Layer)
-# Objectif  : Conserver chaque position reçue pour historique et requêtes live.
-#             Cassandra permet des lectures en <10ms pour le dashboard temps réel.
-#             Parquet permet les analyses historiques en batch (trajectoires, stats).
-# ─────────────────────────────────────────────────────────────────────────────
-
 # 5. QUERY STARTING   
 queryFinal = positions_df.writeStream \
     .foreachBatch(compute_speed_and_write) \
@@ -177,40 +166,9 @@ try:
     queryFinal.awaitTermination()
 except Exception as e:
     print(f"Erreur pendant le streaming : {e}")
-    
-
-# # Données brutes du satellite envoyées sur Cassandra
-# queryCassandra = positions_df.writeStream \
-#     .format("org.apache.spark.sql.cassandra") \
-#     .options(table="positions", keyspace="satellite") \
-#     .option("checkpointLocation", "/opt/spark/home/checkpoint_cassandra") \
-#     .outputMode("append") \
-#     .start()
-#     # .trigger(processingTime='20 seconds') \
-#     # .option("keyspace", "satellite") \
-#     # .option("table", "positions") \
-        
-# # 2. On lance l'écriture vers Parquet (Historisation / Archive)
-# query_parquet = result.writeStream \
-#     .outputMode("append") \
-#     .format("parquet") \
-#     .option("path", "/opt/spark/home/parquet_data") \
-#     .option("checkpointLocation", "/opt/spark/checkpoints/parquet") \
-#     .start()
-
 
 # NB : Le problème est fondamental — Window.partitionBy().orderBy() avec lag() ne peut jamais être 
 # appliqué directement sur un stream, peu importe la table ou la structure.
 # Spark streaming ne peut pas regarder en arrière dans l'historique des données — il ne voit qu'un batch à la fois.
 # C'est pour ça que foreachBatch est la seule solution — 
 # il convertit temporairement chaque mini-batch en DataFrame statique où lag() est autorisé
-# C'est pour cela que foreachBatch est la seule solution:
-
-# # Données brutes et enrichies par le calcul de la vitesse envoyées
-# queryFinal = positions_df.writeStream \
-#     .foreachBatch(compute_speed_and_write) \
-#     .trigger(processingTime='10 seconds') \
-#     .option("checkpointLocation", "/opt/spark/home/checkpoint_final") \
-#     .outputMode("append") \
-#     .start()
-
