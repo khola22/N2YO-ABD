@@ -77,18 +77,20 @@ services:
   cassandra-setup:
     image: python:3.9-slim
     container_name: cassandra-setup
+    depends_on:
+      # to ensure it the containers startone Cassandra is ready
+      cassandra:
+        condition: service_healthy  
     networks:
       - network1
     volumes:
       - ./src/initCassandra.py:/initCassandra.py
     command: >
       sh -c "pip install cassandra-driver && python /initCassandra.py"
-    depends_on:
-      - cassandra
 
 # Spark streaming
   spark-master:
-    image: spark:latest
+    image: apache/spark:3.5.0
     container_name: spark-master
     depends_on:
       cassandra:
@@ -113,7 +115,7 @@ services:
     command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master --host spark-master --port 7077 --webui-port 8080
 
   spark-worker:
-    image: spark:latest
+    image: apache/spark:3.5.0
     container_name: spark-worker
     depends_on:
       - spark-master
@@ -156,7 +158,7 @@ services:
 
 # Spark Consumer (submits the streaming job to spark-master)
   spark-consumer:
-    image: spark:latest
+    image: apache/spark:3.5.0
     container_name: sparkConsumer
     networks:
       - network1
@@ -177,7 +179,7 @@ services:
       --conf spark.cassandra.connection.host=cassandra
       --conf spark.driver.extraJavaOptions=-Djava.security.manager=allow
       --conf spark.executor.extraJavaOptions=-Djava.security.manager=allow
-      --packages org.apache.spark:spark-sql-kafka-0-10_2.13:4.0.0,com.datastax.spark:spark-cassandra-connector_2.13:3.5.1,com.github.jnr:jnr-posix:3.1.15
+      --packages org.apache.spark:spark-sql-kafka-0-10_2.13:3.5.0,com.datastax.spark:spark-cassandra-connector_2.13:3.5.0,com.github.jnr:jnr-posix:3.1.15
       /opt/spark/src/sparkConsumer.py
   
 # Enable communication between containers
