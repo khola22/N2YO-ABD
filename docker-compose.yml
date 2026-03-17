@@ -184,30 +184,6 @@ services:
       --conf spark.cassandra.connection.host=cassandra
       --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0,com.datastax.spark:spark-cassandra-connector_2.12:3.5.0,com.github.jnr:jnr-posix:3.1.15
       /opt/spark/src/sparkConsumer.py
-
-  # Spark Batch (traitement historique des données Parquet)
-  spark-batch:
-    image: apache/spark:3.5.0
-    container_name: sparkBatch
-    networks:
-      - network1
-    depends_on:
-      cassandra:
-        condition: service_healthy
-      spark-master:
-        condition: service_started
-    volumes:
-      - ./spark_home:/opt/spark/home
-      - ./src:/opt/spark/src
-    profiles:
-      - batch
-    command: >
-      /opt/spark/bin/spark-submit
-      --master spark://spark-master:7077
-      --conf spark.jars.ivy=/opt/spark/home/.ivy2
-      --conf spark.cassandra.connection.host=cassandra
-      --packages com.datastax.spark:spark-cassandra-connector_2.12:3.5.0,com.github.jnr:jnr-posix:3.1.15
-      /opt/spark/src/sparkBatch.py
   
 # Enable communication between containers
 networks:
