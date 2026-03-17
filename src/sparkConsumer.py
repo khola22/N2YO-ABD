@@ -1,6 +1,6 @@
 # Imports
 from pyspark.sql import SparkSession, Window
-from pyspark.sql.functions import explode, col, from_json, when
+from pyspark.sql.functions import explode, col, from_json, when, from_unixtime, to_timestamp
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DoubleType, BooleanType, ArrayType
 from pyspark.sql.functions import (
     explode, col, from_json, lag, sqrt, pow as spark_pow,
@@ -114,7 +114,8 @@ def compute_speed_and_write(batch_df, batch_id):
                 .otherwise(None)
             ) \
             .drop("prev_lat", "prev_lon", "prev_timestamp", "R",
-                  "dlat", "dlon", "a", "distance_km", "delta_t")
+                  "dlat", "dlon", "a", "distance_km", "delta_t") \
+            .withColumn("datetime", to_timestamp(from_unixtime(col("timestamp"))))
 
         # Cassandra : uniquement les points avec vitesse (on ne garde pas les valeurs nulles)
         enriched_df.filter(col("speed_km_s").isNotNull()) \

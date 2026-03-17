@@ -27,10 +27,10 @@ def setup():
         CREATE TABLE IF NOT EXISTS satellite.positions (
             satid int,
             satname text,
+            datetime timestamp,
             satlatitude double,
             satlongitude double,
             sataltitude double,
-            timestamp int,
             eclipsed boolean,
             speed_km_s   double,  
             PRIMARY KEY (satid, timestamp)
@@ -38,7 +38,7 @@ def setup():
     """)
     
     # TABLE 2 — Statiqtiques réalisées quotidiennement (Alimentées par le traitement Batch)
-    # On stocke les vues Batch 
+    # On stocke les vues Batch
     session.execute("""
         CREATE TABLE IF NOT EXISTS satellite.daily_stats (
             satid int,
@@ -47,7 +47,7 @@ def setup():
             avg_speed double,
             max_altitude double,
             min_altitude double,
-            total_records int, 
+            total_records bigint, 
             PRIMARY KEY (satid, day)
         )
     """) 

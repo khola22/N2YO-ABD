@@ -2,6 +2,12 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, avg, max, min, count, from_unixtime, to_date
 
+## Logique du flux
+# Kafka → Spark Streaming → Cassandra (positions)   ← dashboard live
+#                        → Parquet (historique)
+#                             ↓
+#                        Spark Batch → Cassandra (daily_stats)  ← dashboard stats
+
 # 1. SPARK SESSION
 spark = SparkSession.builder \
     .appName("SatelliteBatchAnalysis") \
@@ -11,9 +17,7 @@ spark = SparkSession.builder \
 
 # 2. LECTURE
 historical_df = spark.read \
-    .format("org.apache.spark.sql.cassandra") \
-    .options(table="positions", keyspace="satellite") \
-    .load()
+    .parquet("/opt/spark/home/parquet_data")
 
 print("--- SCHEMA DETECTE ---")
 historical_df.printSchema()
@@ -45,8 +49,8 @@ if result_count > 0:
         .options(table="daily_stats", keyspace="satellite") \
         .mode("append") \
         .save()
-    print("✅ Job Batch terminé avec succès !")
+    print("Job Batch terminé avec succès !")
 else:
-    print("❌ Erreur : batch_stats est vide. Vérifie le contenu de la table 'positions'.")
-
+    print("Erreur : batch_stats est vide. Vérifie le contenu de la table 'positions'.")
+    
 spark.stop()

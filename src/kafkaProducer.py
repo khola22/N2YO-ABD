@@ -1,3 +1,4 @@
+#Imports
 from kafka import KafkaProducer
 import json
 import time
@@ -26,7 +27,7 @@ producer = KafkaProducer(
     # Use of intern address 'kafka:29092'
     bootstrap_servers=KAFKA_BROKER,
     value_serializer=lambda v: json.dumps(v).encode('utf-8'),
-    acks=1 # leader ensures data is received
+    acks=1 # leader ensures data is received before going on
 )
 
 print(f"Producer démarré. Envoi vers {KAFKA_BROKER}...")
