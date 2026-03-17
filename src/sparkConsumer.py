@@ -59,12 +59,16 @@ schema = StructType([
 ])
 
 # 2. SESSION SPARK CREATION
+# Do not set -Djava.security.manager=allow here when Spark runs on Java 11.
+# On Java 11, the JVM treats "allow" as a SecurityManager class name and
+# fails during startup with ClassNotFoundException: allow.
 spark = SparkSession.builder \
     .appName("SatelliteStream") \
     .config("spark.cassandra.connection.host", "cassandra") \
-    .config("spark.driver.extraJavaOptions", "-Djava.security.manager=allow") \
-    .config("spark.executor.extraJavaOptions", "-Djava.security.manager=allow") \
     .getOrCreate()
+    # .config("spark.driver.extraJavaOptions", "-Djava.security.manager=allow") \
+    # .config("spark.executor.extraJavaOptions", "-Djava.security.manager=allow") \
+    
     # .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0,com.datastax.spark:spark-cassandra-connector_2.12:3.5.0") \
 
 # ─────────────────────────────────────────────────────────────────────────────
