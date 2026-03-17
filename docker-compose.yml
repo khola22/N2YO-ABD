@@ -121,6 +121,11 @@ services:
       - spark-master
     networks:
       - network1
+    volumes:
+      # Executors write Parquet part files from the worker container.
+      # This mount must match the driver path used by spark-consumer so the
+      # final output files and temporary task files live on the same shared directory.
+      - ./spark_home:/opt/spark/home
     # environment:
     #   - SPARK_MODE=worker
     #   - SPARK_MASTER_URL=spark://spark-master:7077
