@@ -94,57 +94,69 @@ spark = SparkSession.builder \
 
 # 3. CALCULATION FONCTION (orbital speed)              
 def compute_speed_and_write(batch_df, batch_id):
-    if batch_df.count() > 0:
-        # 1. CALCUL DE LA VITESSE (logique Haversine)
-        window_spec = Window.partitionBy("satid").orderBy("timestamp")
-        
-        enriched_df = batch_df \
-            .withColumn("prev_lat",       lag("satlatitude",  1).over(window_spec)) \
-            .withColumn("prev_lon",       lag("satlongitude", 1).over(window_spec)) \
-            .withColumn("prev_timestamp", lag("timestamp",    1).over(window_spec)) \
-            .withColumn("R", col("sataltitude") + 6371.0) \
-            .withColumn("dlat", radians(col("satlatitude")  - col("prev_lat"))) \
-            .withColumn("dlon", radians(col("satlongitude") - col("prev_lon"))) \
-            .withColumn("a",
-                spark_pow(sin(col("dlat") / 2), 2) +
-                cos(radians(col("prev_lat"))) *
-                cos(radians(col("satlatitude"))) *
-                spark_pow(sin(col("dlon") / 2), 2)
-            ) \
-            .withColumn("distance_km", 2 * col("R") * asin(sqrt(col("a")))) \
-            .withColumn("delta_t", col("timestamp") - col("prev_timestamp")) \
-            .withColumn("speed_km_s",
-                when(col("delta_t") > 0, col("distance_km") / col("delta_t"))
-                .otherwise(None)
-            ) \
-            .drop("prev_lat", "prev_lon", "prev_timestamp", "R",
-                  "dlat", "dlon", "a", "distance_km", "delta_t") \
-            .withColumn("datetime", to_timestamp(from_unixtime(col("timestamp"))))
+    # count() launches a full Spark job over the whole batch.
+    # isEmpty() is cheaper for a guard clause because it can stop as soon as Spark
+    # knows whether at least one row exists.
+    if batch_df.isEmpty():
+        print(f"Batch {batch_id} vide : aucun traitement nécessaire.")
+        return
 
-        # Cassandra : uniquement les points avec vitesse (on ne garde pas les valeurs nulles)
-        enriched_df.filter(col("speed_km_s").isNotNull()) \
-            .select(
-                "satid",
-                "timestamp",
-                "satname",
-                "datetime",
-                "satlatitude",
-                "satlongitude",
-                "sataltitude",
-                "eclipsed",
-                "speed_km_s",
-            ) \
-            .write.format("org.apache.spark.sql.cassandra") \
-            .mode("append") \
-            .options(table="positions", keyspace="satellite") \
-            .save()
+    # 1. CALCUL DE LA VITESSE (logique Haversine)
+    window_spec = Window.partitionBy("satid").orderBy("timestamp")
+    
+    enriched_df = batch_df \
+        .withColumn("prev_lat",       lag("satlatitude",  1).over(window_spec)) \
+        .withColumn("prev_lon",       lag("satlongitude", 1).over(window_spec)) \
+        .withColumn("prev_timestamp", lag("timestamp",    1).over(window_spec)) \
+        .withColumn("R", col("sataltitude") + 6371.0) \
+        .withColumn("dlat", radians(col("satlatitude")  - col("prev_lat"))) \
+        .withColumn("dlon", radians(col("satlongitude") - col("prev_lon"))) \
+        .withColumn("a",
+            spark_pow(sin(col("dlat") / 2), 2) +
+            cos(radians(col("prev_lat"))) *
+            cos(radians(col("satlatitude"))) *
+            spark_pow(sin(col("dlon") / 2), 2)
+        ) \
+        .withColumn("distance_km", 2 * col("R") * asin(sqrt(col("a")))) \
+        .withColumn("delta_t", col("timestamp") - col("prev_timestamp")) \
+        .withColumn("speed_km_s",
+            when(col("delta_t") > 0, col("distance_km") / col("delta_t"))
+            .otherwise(None)
+        ) \
+        .drop("prev_lat", "prev_lon", "prev_timestamp", "R",
+              "dlat", "dlon", "a", "distance_km", "delta_t") \
+        .withColumn("datetime", to_timestamp(from_unixtime(col("timestamp"))))
 
-        # Parquet : tout l'historique, y compris le premier point
-        enriched_df.write \
-            .mode("append") \
-            .parquet("/opt/spark/home/parquet_data") \
-        
-        print(f"Batch {batch_id} traité : Cassandra mis à jour et Parquet archivé.")
+    # The same transformed batch is written twice: once to Cassandra and once to Parquet.
+    # cache() prevents Spark from recomputing the full Haversine pipeline for the second write.
+    enriched_df.cache()
+
+    # Cassandra : uniquement les points avec vitesse (on ne garde pas les valeurs nulles)
+    enriched_df.filter(col("speed_km_s").isNotNull()) \
+        .select(
+            "satid",
+            "timestamp",
+            "satname",
+            "datetime",
+            "satlatitude",
+            "satlongitude",
+            "sataltitude",
+            "eclipsed",
+            "speed_km_s",
+        ) \
+        .write.format("org.apache.spark.sql.cassandra") \
+        .mode("append") \
+        .options(table="positions", keyspace="satellite") \
+        .save()
+
+    # Parquet : tout l'historique, y compris le premier point
+    enriched_df.write \
+        .mode("append") \
+        .parquet("/opt/spark/home/parquet_data")
+
+    # Release the cached batch once both sinks are finished so executors keep memory free.
+    enriched_df.unpersist()
+    print(f"Batch {batch_id} traité : Cassandra mis à jour et Parquet archivé.")
 
 # 4. LECTURE AND PARSING
 # Read from Kafka
@@ -171,10 +183,12 @@ positions_df = json_df.select(
     col("position.eclipsed").alias("eclipsed")
 )
 
-# 5. QUERY STARTING   
+# 5. QUERY STARTING
+# 30 seconds gives the job enough headroom for both writes and avoids constant
+# trigger overruns when a batch is slightly heavier than usual.
 queryFinal = positions_df.writeStream \
     .foreachBatch(compute_speed_and_write) \
-    .trigger(processingTime='10 seconds') \
+    .trigger(processingTime='30 seconds') \
     .option("checkpointLocation", "/opt/spark/home/checkpoint_final") \
     .start()
 
