@@ -123,6 +123,17 @@ def compute_speed_and_write(batch_df, batch_id):
 
         # Cassandra : uniquement les points avec vitesse (on ne garde pas les valeurs nulles)
         enriched_df.filter(col("speed_km_s").isNotNull()) \
+            .select(
+                "satid",
+                "timestamp",
+                "satname",
+                "datetime",
+                "satlatitude",
+                "satlongitude",
+                "sataltitude",
+                "eclipsed",
+                "speed_km_s",
+            ) \
             .write.format("org.apache.spark.sql.cassandra") \
             .mode("append") \
             .options(table="positions", keyspace="satellite") \
