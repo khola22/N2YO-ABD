@@ -4,7 +4,7 @@ from pyspark.sql.functions import explode, col, from_json, when, from_unixtime, 
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DoubleType, BooleanType, ArrayType
 from pyspark.sql.functions import (
     explode, col, from_json, lag, sqrt, pow as spark_pow,
-    sin, cos, asin, radians
+    sin, cos, asin, radians, year, month, dayofmonth, hour
 )
 
 # 1. CONSTRUCTION PLAN
@@ -125,7 +125,11 @@ def compute_speed_and_write(batch_df, batch_id):
         ) \
         .drop("prev_lat", "prev_lon", "prev_timestamp", "R",
               "dlat", "dlon", "a", "distance_km", "delta_t") \
-        .withColumn("datetime", to_timestamp(from_unixtime(col("timestamp"))))
+          .withColumn("datetime", to_timestamp(from_unixtime(col("timestamp")))) \
+          .withColumn("year", year(col("datetime"))) \
+          .withColumn("month", month(col("datetime"))) \
+          .withColumn("day", dayofmonth(col("datetime"))) \
+          .withColumn("hour", hour(col("datetime")))
 
     # The same transformed batch is written twice: once to Cassandra and once to Parquet.
     # cache() prevents Spark from recomputing the full Haversine pipeline for the second write.
@@ -149,9 +153,13 @@ def compute_speed_and_write(batch_df, batch_id):
         .options(table="positions", keyspace="satellite") \
         .save()
 
-    # Parquet : tout l'historique, y compris le premier point
+    # Parquet : tout l'historique, y compris le premier point.
+    # Partitioning by event-time columns creates directories like:
+    # parquet_data/year=2026/month=3/day=17/hour=14/
+    # which lets Spark prune files quickly when you filter by period.
     enriched_df.write \
         .mode("append") \
+        .partitionBy("year", "month", "day", "hour") \
         .parquet("/opt/spark/home/parquet_data")
 
     # Release the cached batch once both sinks are finished so executors keep memory free.
