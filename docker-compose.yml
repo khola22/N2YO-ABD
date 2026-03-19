@@ -190,6 +190,19 @@ services:
       --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0,com.datastax.spark:spark-cassandra-connector_2.12:3.5.0,com.github.jnr:jnr-posix:3.1.15
       /opt/spark/src/sparkConsumer.py
   
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    networks:
+      - network1
+    ports:
+      - "3000:3000"
+    depends_on:
+      cassandra:
+        condition: service_healthy
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+  
 # Enable communication between containers
 networks:
   network1:
