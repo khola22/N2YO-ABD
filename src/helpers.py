@@ -1,10 +1,10 @@
 import time
 import requests
 
-def get_sat_data(sat_id, api_key, lat, lon, alt, seconds=2):
+def get_sat_data(sat_id, api_key, lat, lon, alt, seconds=10):
     """
     Fetch satellite data from the N2YO API.
-    seconds parameter specifies how many seconds of data to retrieve (default is 2 to get near real time data).
+    seconds parameter specifies how many seconds of data to retrieve (default is 10 to get near real time data).
     """
     url = f"https://api.n2yo.com/rest/v1/satellite/positions/{sat_id}/{lat}/{lon}/{alt}/{seconds}/&apiKey={api_key}"
     response = requests.get(url)
