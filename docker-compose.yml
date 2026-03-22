@@ -202,6 +202,9 @@ services:
         condition: service_healthy
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
+    # pour que les données persiste
+    volumes:
+    - grafana-data:/var/lib/grafana
   
 # Enable communication between containers
 networks:
@@ -212,3 +215,4 @@ networks:
 # Long-term memory for storing data
 volumes:
   cassandra-data:
+  grafana-data: 

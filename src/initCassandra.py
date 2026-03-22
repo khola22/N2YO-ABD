@@ -78,18 +78,6 @@ def setup():
             PRIMARY KEY (satid, day)
         )
     """) 
-
-    # # TABLE 3 — Statistiques d'éclipse (Speed Layer)
-    # session.execute("""
-    #     CREATE TABLE IF NOT EXISTS satellite.eclipse_stats (
-    #         satid            int,
-    #         satname          text,
-    #         time_in_eclipse  bigint,
-    #         time_in_sunlight bigint,
-    #         total_positions  bigint,
-    #         PRIMARY KEY (satid)
-    #     )
-    # """)
     
     print("Keyspace and Table created successfully!")
     cluster.shutdown()
