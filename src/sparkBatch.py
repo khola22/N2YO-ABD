@@ -17,7 +17,8 @@ spark = SparkSession.builder \
 
 # 2. LECTURE
 historical_df = spark.read \
-    .parquet("/opt/spark/home/parquet_data")
+    .option("basePath", "/opt/spark/home/parquet_data") \
+    .parquet("/opt/spark/home/parquet_data/year=*/month=*/day=*/hour=*")
 
 print("--- SCHEMA DETECTE ---")
 historical_df.printSchema()
